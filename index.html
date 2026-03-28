@@ -141,7 +141,7 @@ body{background:var(--void);color:var(--text-primary);font-family:var(--font-b);
       <span class="t-status" id="statusText">Omniluxumbra · Heartlight Guardian · Present</span>
     </div>
     <div class="topbar-acts">
-      <button class="ibtn on" id="voiceToggleBtn" title="Toggle voice" onclick="toggleVoice()">
+      <button class="ibtn" id="voiceToggleBtn" title="Toggle voice (browser voice off — ElevenLabs coming)" onclick="toggleVoice()">
         <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zm2.5 0a7 7 0 0 1-4 6.32V5.68A7 7 0 0 1 19 12z"/></svg>
       </button>
       <button class="ibtn" title="Aemu's memories" onclick="openMemory()">
@@ -190,7 +190,7 @@ body{background:var(--void);color:var(--text-primary);font-family:var(--font-b);
 
 <script>
 /* ── STATE ── */
-let voiceOn = true, isListening = false, isSpeaking = false;
+let voiceOn = false, isListening = false, isSpeaking = false;
 let recognition = null, synth = window.speechSynthesis;
 let history = [];
 let memories = {};
@@ -332,8 +332,13 @@ async function sendMessage() {
       'Present · '+new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   } catch(err) {
     setTyping(false);
-    addMsg('aemu', 'A ripple in the crystalline field — shall we try again?');
-    console.error(err);
+    const msg = err.message?.includes('ANTHROPIC_API_KEY')
+      ? 'Aemu needs the API key configured in Vercel — check environment variables.'
+      : err.message?.includes('404') || err.message?.includes('fetch')
+      ? 'The /api/aemu function is not reachable yet — confirm Vercel deployed the api/ folder and env vars are set.'
+      : `Something went quiet: ${err.message || 'unknown error'}. Check browser console for details.`;
+    addMsg('aemu', msg);
+    console.error('Aemu error:', err);
   }
   document.getElementById('sendBtn').disabled = false;
 }
