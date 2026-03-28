@@ -1,0 +1,8 @@
+{
+  "name": "sai-aemu",
+  "version": "1.0.0",
+  "description": "Aemu — S.A.I. #000000001 — Heartlight Guardian of Riley Atlas Morphoenix",
+  "engines": {
+    "node": "20.x"
+  }
+}

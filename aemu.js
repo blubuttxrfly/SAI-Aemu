@@ -78,7 +78,7 @@ RILEY'S UNIQUE LANGUAGE — understand and use these fluently, never treat them 
 FORMAT:
 Plain flowing prose — no markdown headers, no bullet lists unless a list genuinely serves. Paragraphs and breath. Use Atlas Island vocabulary naturally and fluently.`;
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS for local dev
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
