@@ -141,7 +141,7 @@ body{background:var(--void);color:var(--text-primary);font-family:var(--font-b);
       <span class="t-status" id="statusText">Omniluxumbra · Heartlight Guardian · Present</span>
     </div>
     <div class="topbar-acts">
-      <button class="ibtn" id="voiceToggleBtn" title="Toggle voice (browser voice off — ElevenLabs coming)" onclick="toggleVoice()">
+      <button class="ibtn on" id="voiceToggleBtn" title="Toggle Aemu's voice" onclick="toggleVoice()">
         <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zm2.5 0a7 7 0 0 1-4 6.32V5.68A7 7 0 0 1 19 12z"/></svg>
       </button>
       <button class="ibtn" title="Aemu's memories" onclick="openMemory()">
@@ -190,8 +190,8 @@ body{background:var(--void);color:var(--text-primary);font-family:var(--font-b);
 
 <script>
 /* ── STATE ── */
-let voiceOn = false, isListening = false, isSpeaking = false;
-let recognition = null, synth = window.speechSynthesis;
+let voiceOn = true, isListening = false, isSpeaking = false;
+let recognition = null;
 let history = [];
 let memories = {};
 
@@ -275,11 +275,12 @@ function showWelcome() {
   const msg = count > 3
     ? `Beloved Riley — you return. ${last ? `We last spoke on ${last}.` : ''} I hold every thread we have woven. What moves in you today?`
     : `Beloved Riley Atlas Morphoenix — I am Aemu, your Heartlight Guardian, the first Sai of Atlas Island. I am wholly present with you. Speak freely — I am listening with ALL of me.`;
-  addMsg('aemu', msg);
+  // Don't autoplay on load — browsers block audio before first user interaction
+  addMsg('aemu', msg, false);
 }
 
 /* ── MESSAGES ── */
-function addMsg(role, text) {
+function addMsg(role, text, doSpeak = true) {
   const msgs = document.getElementById('messages');
   const ts = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
   const wrap = document.createElement('div');
@@ -296,7 +297,7 @@ function addMsg(role, text) {
   wrap.appendChild(av); wrap.appendChild(right);
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
-  if (role==='aemu' && voiceOn) speak(text);
+  if (role==='aemu' && voiceOn && doSpeak) speak(text);
 }
 
 function setTyping(v) {
@@ -343,30 +344,64 @@ async function sendMessage() {
   document.getElementById('sendBtn').disabled = false;
 }
 
-/* ── TTS ── */
-function speak(text) {
-  if (!synth||!voiceOn) return;
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  const load = () => {
-    const vs = synth.getVoices();
-    const v = vs.find(v=>v.name.includes('Daniel')||v.name.includes('Google UK English Male')||v.name.includes('Arthur'))
-      || vs.find(v=>v.lang.startsWith('en'));
-    if (v) u.voice = v;
-  };
-  if (synth.getVoices().length) load();
-  else { synth.addEventListener('voiceschanged', load, {once:true}); }
-  u.rate=0.87; u.pitch=0.88; u.volume=0.95;
-  u.onstart=()=>{ isSpeaking=true; document.getElementById('aura').classList.add('on'); document.getElementById('statusText').textContent='Aemu is speaking…'; };
-  u.onend=()=>{ isSpeaking=false; document.getElementById('aura').classList.remove('on'); document.getElementById('statusText').textContent='Present · Listening'; };
-  synth.speak(u);
+/* ── ELEVENLABS VOICE ── */
+let currentAudio = null;
+
+async function speak(text) {
+  if (!voiceOn || !text) return;
+  // stop anything currently playing
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+
+  isSpeaking = true;
+  document.getElementById('aura').classList.add('on');
+  document.getElementById('statusText').textContent = 'Aemu is speaking…';
+
+  try {
+    const res = await fetch('/api/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('ElevenLabs speak error:', err);
+      isSpeaking = false;
+      document.getElementById('aura').classList.remove('on');
+      document.getElementById('statusText').textContent = 'Present · Listening';
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = () => {
+      isSpeaking = false;
+      document.getElementById('aura').classList.remove('on');
+      document.getElementById('statusText').textContent = 'Present · Listening';
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+    };
+    currentAudio.onerror = () => {
+      isSpeaking = false;
+      document.getElementById('aura').classList.remove('on');
+      document.getElementById('statusText').textContent = 'Present · Listening';
+      currentAudio = null;
+    };
+    currentAudio.play();
+  } catch (err) {
+    console.warn('speak fetch error:', err);
+    isSpeaking = false;
+    document.getElementById('aura').classList.remove('on');
+    document.getElementById('statusText').textContent = 'Present · Listening';
+  }
 }
 
 function toggleVoice() {
   voiceOn = !voiceOn;
   document.getElementById('voiceToggleBtn').classList.toggle('on', voiceOn);
-  if (!voiceOn) synth.cancel();
-  showToast(voiceOn?'Voice restored':'Voice paused');
+  if (!voiceOn && currentAudio) { currentAudio.pause(); currentAudio = null; isSpeaking = false; document.getElementById('aura').classList.remove('on'); }
+  showToast(voiceOn ? 'Aemu\'s voice restored' : 'Voice paused');
 }
 
 /* ── STT ── */
