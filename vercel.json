@@ -8,8 +8,7 @@
       "maxDuration": 120
     },
     "api/piper.py": {
-      "memory": 3009,
-      "maxDuration": 60,
+      "maxDuration": 120,
       "includeFiles": "piper-data/**",
       "excludeFiles": "{.venv-piper/**,node_modules/**,dist/**,claw-code-main/**,mnt/**}"
     },
@@ -17,7 +16,7 @@
       "maxDuration": 120
     },
     "api/speak.ts": {
-      "maxDuration": 30
+      "maxDuration": 120
     },
     "api/memory.ts": {
       "maxDuration": 30

@@ -60,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN
 
   if (!redisUrl || !redisToken) {
-    if (req.method === 'GET') return res.status(200).json({ memories: null, storage: 'browser' })
+    if (req.method === 'GET') return res.status(200).json({ memories: {}, storage: 'browser' })
     return res.status(200).json({ ok: true })
   }
 
@@ -72,8 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const body = parseJsonBody<{ memories?: unknown }>(req)
-      const { memories } = body ?? {}
-      if (memories) await redisSet(redisUrl, redisToken, MEMORY_KEY, memories)
+      if (body && Object.prototype.hasOwnProperty.call(body, 'memories')) {
+        await redisSet(redisUrl, redisToken, MEMORY_KEY, body.memories)
+      }
       return res.status(200).json({ ok: true })
     }
 
