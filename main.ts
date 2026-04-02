@@ -1257,7 +1257,7 @@ function clearHomeScreenSoundRetry(): void {
 
 async function playHomeScreenSound(options?: { force?: boolean }): Promise<boolean> {
   const homeSound = getHomeScreenSound()
-  if (!homeSound?.blob) return false
+  if (!homeSound || (!homeSound.blob && !homeSound.assetUrl)) return false
   if (!options?.force && isAmbientAudioPlaying()) return true
 
   try {

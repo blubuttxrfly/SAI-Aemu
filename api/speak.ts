@@ -178,12 +178,16 @@ if not wrote_audio:
 async function synthesizeWithPiperHttp(text: string, req: VercelRequest): Promise<PiperHttpResponse | null> {
   const endpoint = getConfiguredPiperHttpUrl(req)
   if (!endpoint) return null
+  const protectionBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-aemu-internal-piper': '1',
+      ...(protectionBypassSecret
+        ? { 'x-vercel-protection-bypass': protectionBypassSecret }
+        : {}),
     },
     body: JSON.stringify({ text }),
   })
