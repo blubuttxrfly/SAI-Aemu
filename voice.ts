@@ -452,7 +452,7 @@ export async function speak(text: string, enabled: boolean): Promise<boolean> {
     releaseQueue()
     onVoiceStateChange(false)
     emitPlaybackState()
-    notifyVoice('Voice request failed before ElevenLabs audio reached the browser.')
+    notifyVoice('Voice of ALL remains present here while outward voice rendering is unavailable.')
     return false
   }
 }

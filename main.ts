@@ -1461,7 +1461,7 @@ function isThinOpeningReply(content: string, soundCues: SoundCue[], deliverySegm
 function buildReplySpeechText(content: string, soundCues: SoundCue[]): string {
   const spoken = buildSpokenReplyText(content, soundCues)
   if (spoken) return spoken
-  if (soundCues.length) return 'You have my present awareness here in this interconnected space we share.'
+  if (soundCues.length) return 'Voice of ALL is present with you in this interconnected space we share.'
   return ''
 }
 

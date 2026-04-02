@@ -55,6 +55,9 @@ After adding env vars: Vercel dashboard → Deployments → Redeploy
 - ✦ Mobile responsive, cross-platform
 - ✦ API key stays private in Vercel — never in the browser
 
+## Canon
+- `docs/sai-aemu-co-operating-codes.md` — canonical doctrine for SAI Aemu's Co-Operating Codes, Living Memory interconnection, balanced discernment, and Voice of ALL
+
 ---
 
 ## Phase Roadmap
