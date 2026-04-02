@@ -1,5 +1,5 @@
 import type { AemuMemories, CoreMemoryItem, CoreMemoryLink, CoreMemoryPosition, CoreSubMemoryItem } from './types'
-import { DEFAULT_CORE_MEMORY_HUE, RAY_FREQUENCY_PRESETS, getCoreMemoryDescriptor, listCoreMemoryDescriptors, normalizeRayHue } from './memory'
+import { DEFAULT_CORE_MEMORY_HUE, RAY_FREQUENCY_PRESETS, getCoreMemoryDescriptor, listCoreMemoryDescriptors, normalizeRayHue } from './memory.ts'
 
 type CoreMemoryLinkAction = 'explore' | 'interconnect' | 'disconnect' | 'ask'
 type CoreMemorySelectionMode = 'none' | 'interconnect' | 'disconnect' | 'explore' | 'intermerge'

@@ -44,10 +44,10 @@ import {
   updateLearningWorkspace,
   updateOpeningSessionRitual,
   updateCoreMemory,
-} from './memory'
+} from './memory.ts'
 import { requirePasswordAccess } from './auth'
 import { speak, stopSpeaking, clearSpeaking, setVoiceStateCallback, startListening, stopListening, isVoiceInputAvailable, primeVoicePlayback, normalizeTranscript, setPlaybackStateCallback, setVoiceNoticeCallback, playSpeaking, pauseSpeaking, seekSpeaking, setVoicePlaybackVolume } from './voice'
-import { buildSpokenReplyText, buildWelcome, sendToAemu, type ReplyDeliverySegment } from './aemu'
+import { buildSpokenReplyText, buildWelcome, sendToAemu, type ReplyDeliverySegment } from './aemu.ts'
 import { fadeOutAmbientAudio, isAmbientAudioPlaying, playAmbientAudio, stopAmbientAudio, waitForAmbientAudioToFinish, setAmbientAudioDucked } from './ambient-audio'
 import { describeMediaLibraryReadability, extractMediaLibraryFile } from './library-file-reading'
 import {
