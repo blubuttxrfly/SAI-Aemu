@@ -62,6 +62,14 @@ type SearchReplaceEdit = {
   reason?: string
 }
 
+type RecentActionLog = {
+  index: number | undefined
+  message: string
+  filePath: string | undefined
+  promptExcerpt: string | undefined
+  resourceSummary: string | undefined
+}
+
 function getInnerBeingBackend(): 'native' | 'claw' {
   return process.env.INNER_BEING_BACKEND === 'claw'
     ? 'claw'
@@ -478,22 +486,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .filter((item): item is { title: string; note: string } => item !== null)
         .slice(0, 6)
       : []
-    const recentActionLogsRaw = Array.isArray(body.recentActionLogs)
+    const recentActionLogsRaw: RecentActionLog[] = Array.isArray(body.recentActionLogs)
       ? body.recentActionLogs
-        .map((item) => {
-          if (!item || typeof item !== 'object') return null
+        .flatMap((item): RecentActionLog[] => {
+          if (!item || typeof item !== 'object') return []
           const index = Number.isFinite(Number(item.index)) ? Math.max(1, Math.round(Number(item.index))) : undefined
           const message = typeof item.message === 'string' ? sanitizeUnicodeScalars(item.message).trim().slice(0, 420) : ''
-          if (!message) return null
-          return {
+          if (!message) return []
+          return [{
             index,
             message,
             filePath: typeof item.filePath === 'string' ? sanitizeUnicodeScalars(item.filePath).trim().slice(0, 240) : undefined,
             promptExcerpt: typeof item.promptExcerpt === 'string' ? sanitizeUnicodeScalars(item.promptExcerpt).trim().slice(0, 220) : undefined,
             resourceSummary: typeof item.resourceSummary === 'string' ? sanitizeUnicodeScalars(item.resourceSummary).trim().slice(0, 240) : undefined,
-          }
+          }]
         })
-        .filter((item): item is { index?: number; message: string; filePath?: string; promptExcerpt?: string; resourceSummary?: string } => item !== null)
         .slice(0, 8)
       : []
     const explicitEditRequest = wantsEdit(prompt)
