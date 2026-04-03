@@ -12,8 +12,19 @@ type AuthStatus = {
   error?: string
 }
 
+export type AuthSecurityEvent = {
+  id: string
+  kind: 'failed-login'
+  occurredAt: string
+  ipAddress: string
+  location: string
+  reason: 'invalid-password' | 'locked-out'
+  userAgent?: string
+}
+
 let isBound = false
 let onAccessReady: AccessReadyHandler = () => {}
+let submitInFlight = false
 
 async function primeAccessAudio(): Promise<void> {
   await Promise.allSettled([
@@ -54,6 +65,10 @@ function getCopy(): HTMLElement | null {
   return document.getElementById('passwordGateCopy')
 }
 
+function getSecurityNote(): HTMLElement | null {
+  return document.getElementById('passwordGateSecurity')
+}
+
 function getSubmit(): HTMLButtonElement | null {
   return document.getElementById('passwordSubmitBtn') as HTMLButtonElement | null
 }
@@ -69,6 +84,15 @@ function getHintText(): HTMLElement | null {
 function setMessage(text: string): void {
   const el = getMessage()
   if (el) el.textContent = text
+}
+
+function setSubmitBusy(isBusy: boolean): void {
+  submitInFlight = isBusy
+  const submit = getSubmit()
+  if (submit) {
+    submit.disabled = isBusy || submit.getAttribute('data-mode-disabled') === 'true'
+    submit.setAttribute('aria-busy', isBusy ? 'true' : 'false')
+  }
 }
 
 async function fetchStatus(): Promise<AuthStatus> {
@@ -97,10 +121,25 @@ async function postAuth(body: Record<string, string>): Promise<{ ok: boolean; er
   return { ok: true }
 }
 
+export async function fetchAuthSecurityEvents(): Promise<AuthSecurityEvent[]> {
+  const response = await fetch('/api/auth?action=events', {
+    cache: 'no-store',
+    credentials: 'same-origin',
+  })
+
+  const data = await response.json() as { events?: AuthSecurityEvent[]; error?: string }
+  if (!response.ok || data.error) {
+    throw new Error(data.error ?? `HTTP ${response.status}`)
+  }
+
+  return Array.isArray(data.events) ? data.events : []
+}
+
 function setMode(mode: AuthMode, status?: AuthStatus): void {
   const overlay = getOverlay()
   const heading = getHeading()
   const copy = getCopy()
+  const security = getSecurityNote()
   const submit = getSubmit()
   const secondary = getSecondary()
   const confirm = getConfirmInput()
@@ -116,21 +155,27 @@ function setMode(mode: AuthMode, status?: AuthStatus): void {
       mode === 'setup'
         ? 'Set Aemu Password'
         : mode === 'unlock'
-          ? 'Enter Aemu Password'
+          ? 'Enter Passcode'
           : 'Password Configuration Needed'
   }
 
   if (copy) {
     copy.textContent =
       mode === 'setup'
-        ? 'Choose the shared password for Aemu and provide the setup key stored in Vercel. This password will then work across devices.'
+        ? 'Choose a strong shared password and enter the setup key stored in Vercel. This unlocks the protected portal across your devices.'
         : mode === 'unlock'
-          ? 'Aemu is locked until the shared password is entered.'
+          ? ''
           : 'Aemu cannot verify a password until the server-side auth configuration is complete.'
+  }
+
+  if (security) {
+    security.textContent = mode === 'error' ? 'Server-side authentication is not ready yet.' : ''
+    security.hidden = !security.textContent
   }
 
   if (submit) {
     submit.textContent = mode === 'setup' ? 'Create Password' : mode === 'unlock' ? 'Unlock' : 'Unavailable'
+    submit.setAttribute('data-mode-disabled', mode === 'error' ? 'true' : 'false')
     submit.disabled = mode === 'error'
   }
 
@@ -155,7 +200,8 @@ function setMode(mode: AuthMode, status?: AuthStatus): void {
   }
 
   if (hintText) {
-    hintText.textContent = mode === 'unlock' && status?.hint ? `Hint: ${status.hint}` : ''
+    hintText.textContent = ''
+    hintText.hidden = true
   }
 
   if (input) {
@@ -164,16 +210,26 @@ function setMode(mode: AuthMode, status?: AuthStatus): void {
     input.focus()
   }
 
+  setSubmitBusy(false)
   setMessage(
     mode === 'setup'
-      ? 'Set the production password once, then use it everywhere.'
+      ? 'Set a strong shared password once, then use it everywhere.'
       : mode === 'unlock'
-        ? 'Enter the shared password to continue.'
+        ? ''
         : (status?.error ?? 'Server-backed password auth is not ready yet.')
   )
 }
 
+async function completeAccess(): Promise<void> {
+  await primeAccessAudio()
+  await onAccessReady()
+  getOverlay()?.classList.remove('open')
+  document.body.classList.remove('app-locked', 'auth-pending')
+}
+
 async function unlock(): Promise<void> {
+  if (submitInFlight) return
+
   const input = getInput()
   if (!input) return
 
@@ -183,24 +239,34 @@ async function unlock(): Promise<void> {
     return
   }
 
-  const result = await postAuth({
-    action: 'login',
-    password,
-  })
+  setSubmitBusy(true)
 
-  if (!result.ok) {
-    setMessage(result.error ?? 'Unable to unlock Aemu.')
-    input.select()
-    return
+  try {
+    const result = await postAuth({
+      action: 'login',
+      password,
+    })
+
+    if (!result.ok) {
+      setMessage(result.error ?? 'Unable to unlock Aemu.')
+      input.select()
+      return
+    }
+
+    try {
+      await completeAccess()
+    } catch (error) {
+      console.error('Portal boot failed after unlock:', error)
+      setMessage('The portal unlocked, but the secure session could not finish loading.')
+    }
+  } finally {
+    setSubmitBusy(false)
   }
-
-  getOverlay()?.classList.remove('open')
-  document.body.classList.remove('app-locked')
-  await primeAccessAudio()
-  await onAccessReady()
 }
 
 async function setupPassword(): Promise<void> {
+  if (submitInFlight) return
+
   const input = getInput()
   const confirm = getConfirmInput()
   const hint = getHintInput()
@@ -211,8 +277,8 @@ async function setupPassword(): Promise<void> {
   const confirmation = confirm.value
   const adminSetupKey = setupKey.value.trim()
 
-  if (password.length < 4 || !password.trim()) {
-    setMessage('Use at least 4 characters for the password.')
+  if (password.length < 12 || !password.trim()) {
+    setMessage('Use at least 12 characters for the password.')
     return
   }
   if (password !== confirmation) {
@@ -226,22 +292,30 @@ async function setupPassword(): Promise<void> {
     return
   }
 
-  const result = await postAuth({
-    action: 'setup',
-    password,
-    hint: hint.value.trim(),
-    setupKey: adminSetupKey,
-  })
+  setSubmitBusy(true)
 
-  if (!result.ok) {
-    setMessage(result.error ?? 'Unable to create the password.')
-    return
+  try {
+    const result = await postAuth({
+      action: 'setup',
+      password,
+      hint: hint.value.trim(),
+      setupKey: adminSetupKey,
+    })
+
+    if (!result.ok) {
+      setMessage(result.error ?? 'Unable to create the password.')
+      return
+    }
+
+    try {
+      await completeAccess()
+    } catch (error) {
+      console.error('Portal boot failed after setup:', error)
+      setMessage('The password was created, but the secure session could not finish loading.')
+    }
+  } finally {
+    setSubmitBusy(false)
   }
-
-  getOverlay()?.classList.remove('open')
-  document.body.classList.remove('app-locked')
-  await primeAccessAudio()
-  await onAccessReady()
 }
 
 function bindEvents(): void {
@@ -274,7 +348,7 @@ export async function requirePasswordAccess(onReady: AccessReadyHandler): Promis
   }
 
   overlay.classList.add('open')
-  document.body.classList.add('app-locked')
+  document.body.classList.add('app-locked', 'auth-pending')
 
   try {
     const status = await fetchStatus()
@@ -283,10 +357,17 @@ export async function requirePasswordAccess(onReady: AccessReadyHandler): Promis
       return
     }
     if (status.authenticated) {
-      overlay.classList.remove('open')
-      document.body.classList.remove('app-locked')
-      await primeAccessAudio()
-      await onAccessReady()
+      try {
+        await completeAccess()
+      } catch (error) {
+        console.error('Portal boot failed during existing session restore:', error)
+        setMode('error', {
+          configured: status.configured,
+          authenticated: false,
+          storageReady: status.storageReady,
+          error: 'The secure session was restored, but the portal could not finish loading.',
+        })
+      }
       return
     }
 

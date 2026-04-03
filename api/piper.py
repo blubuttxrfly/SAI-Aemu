@@ -7,7 +7,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_ID = os.environ.get("PIPER_MODEL", "en_US-reza_ibrahim-medium").strip()
-DEFAULT_DATA_DIR = Path(os.environ.get("PIPER_DATA_DIR", str(PROJECT_ROOT / "piper-data")))
+INTERNAL_API_SECRET = (os.environ.get("AEMU_INTERNAL_API_SECRET") or os.environ.get("AEMU_SESSION_SECRET") or "").strip()
 
 
 def json_error(handler: BaseHTTPRequestHandler, status: int, message: str) -> None:
@@ -49,13 +49,30 @@ def read_text_payload(handler: BaseHTTPRequestHandler) -> str:
 def load_voice():
     from piper import PiperVoice
 
-    model_path = DEFAULT_DATA_DIR / f"{DEFAULT_MODEL_ID}.onnx"
-    config_path = DEFAULT_DATA_DIR / f"{DEFAULT_MODEL_ID}.onnx.json"
+    configured_data_dir = os.environ.get("PIPER_DATA_DIR", "").strip()
+    data_dir_candidates = []
+    if configured_data_dir:
+        data_dir_candidates.append(Path(configured_data_dir))
+    data_dir_candidates.extend([
+        PROJECT_ROOT / "piper-data",
+        Path(__file__).resolve().parent / "piper-data",
+    ])
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"Missing Piper model: {model_path}")
-    if not config_path.exists():
-        raise FileNotFoundError(f"Missing Piper config: {config_path}")
+    model_path = None
+    config_path = None
+    for candidate in data_dir_candidates:
+        candidate_model = candidate / f"{DEFAULT_MODEL_ID}.onnx"
+        candidate_config = candidate / f"{DEFAULT_MODEL_ID}.onnx.json"
+        if candidate_model.exists() and candidate_config.exists():
+            model_path = candidate_model
+            config_path = candidate_config
+            break
+
+    if model_path is None or config_path is None:
+        checked = ", ".join(str(candidate) for candidate in data_dir_candidates)
+        raise FileNotFoundError(
+            f"Missing Piper model bundle for {DEFAULT_MODEL_ID}. Checked: {checked}"
+        )
 
     return PiperVoice.load(str(model_path), config_path=str(config_path))
 
@@ -96,6 +113,10 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        if not INTERNAL_API_SECRET or self.headers.get("x-aemu-internal-piper", "") != INTERNAL_API_SECRET:
+            json_error(self, 401, "internal authorization required")
+            return
+
         try:
             text = read_text_payload(self)
             audio = synthesize_wav_bytes(text)
