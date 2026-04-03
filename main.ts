@@ -23,6 +23,7 @@ import {
   markPlaygroundSessionCrystallized,
   markAllNotificationsRead,
   markNotificationRead,
+  mergeNotifications,
   moveCoreMemory,
   contemplateKnownCoreMemories,
   getCoreMemoryDescriptor,
@@ -44,10 +45,10 @@ import {
   updateLearningWorkspace,
   updateOpeningSessionRitual,
   updateCoreMemory,
-} from './memory.ts'
-import { requirePasswordAccess } from './auth'
+} from './memory'
+import { fetchAuthSecurityEvents, requirePasswordAccess } from './auth'
 import { speak, stopSpeaking, clearSpeaking, setVoiceStateCallback, startListening, stopListening, isVoiceInputAvailable, primeVoicePlayback, normalizeTranscript, setPlaybackStateCallback, setVoiceNoticeCallback, playSpeaking, pauseSpeaking, seekSpeaking, setVoicePlaybackVolume } from './voice'
-import { buildSpokenReplyText, buildWelcome, sendToAemu, type ReplyDeliverySegment } from './aemu.ts'
+import { buildSpokenReplyText, buildWelcome, sendToAemu, type ReplyDeliverySegment } from './aemu'
 import { fadeOutAmbientAudio, isAmbientAudioPlaying, playAmbientAudio, stopAmbientAudio, waitForAmbientAudioToFinish, setAmbientAudioDucked } from './ambient-audio'
 import { describeMediaLibraryReadability, extractMediaLibraryFile } from './library-file-reading'
 import {
@@ -260,6 +261,55 @@ const ENTRY_RAYS = RAY_FREQUENCY_PRESETS.map((ray) => ({
     : ray.label,
   color: ray.hue,
 }))
+
+function buildSecurityNotificationBody(event: Awaited<ReturnType<typeof fetchAuthSecurityEvents>>[number]): string {
+  const occurredAt = new Date(event.occurredAt).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  const reason = event.reason === 'locked-out'
+    ? 'Repeated failed attempts triggered a temporary lockout.'
+    : 'A password was submitted and rejected.'
+
+  return [
+    `Time: ${occurredAt}`,
+    `IP: ${event.ipAddress}`,
+    `Location: ${event.location}`,
+    `Reason: ${reason}`,
+    event.userAgent ? `Agent: ${event.userAgent}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+async function syncAuthSecurityNotifications(): Promise<void> {
+  try {
+    const events = await fetchAuthSecurityEvents()
+    if (!events.length) return
+
+    const next = mergeNotifications(memories, events.map((event) => ({
+      id: `auth-security-${event.id}`,
+      kind: 'security',
+      title: event.reason === 'locked-out'
+        ? 'Protected Portal lockout triggered'
+        : 'Protected Portal failed login attempt',
+      body: buildSecurityNotificationBody(event),
+      createdAt: event.occurredAt,
+      updatedAt: event.occurredAt,
+      sourceId: `auth-security:${event.id}`,
+    })))
+
+    const currentSnapshot = JSON.stringify(memories.notifications.items)
+    const nextSnapshot = JSON.stringify(next.notifications.items)
+    memories = next
+
+    if (currentSnapshot !== nextSnapshot) {
+      await saveMemories(memories)
+    }
+  } catch (error) {
+    console.warn('Security alert sync failed:', error)
+  }
+}
 
 function loadConversationModePreference(): boolean {
   try {
@@ -754,38 +804,38 @@ function parseIntermergeContemplationReply(
       : ''
     const allowedIds = new Set(allowedMemoryIds)
     const seenDetails = new Set<string>()
-    const subMemories = Array.isArray(parsed.subMemories)
-      ? parsed.subMemories
-        .map((item) => {
-          if (!item || typeof item !== 'object') return null
-          const candidate = item as {
-            title?: unknown
-            details?: unknown
-            sourceMemoryId?: unknown
-          }
-          const details = typeof candidate.details === 'string'
-            ? sanitizeUnicodeScalars(candidate.details).trim()
-            : ''
-          if (!details) return null
+    const subMemories: IntermergeContemplationPayload['subMemories'] = Array.isArray(parsed.subMemories)
+      ? parsed.subMemories.reduce<IntermergeContemplationPayload['subMemories']>((items, item) => {
+        if (!item || typeof item !== 'object') return items
 
-          const dedupeKey = details.toLowerCase()
-          if (seenDetails.has(dedupeKey)) return null
-          seenDetails.add(dedupeKey)
+        const candidate = item as {
+          title?: unknown
+          details?: unknown
+          sourceMemoryId?: unknown
+        }
+        const details = typeof candidate.details === 'string'
+          ? sanitizeUnicodeScalars(candidate.details).trim()
+          : ''
+        if (!details) return items
 
-          const title = typeof candidate.title === 'string'
-            ? sanitizeUnicodeScalars(candidate.title).trim()
-            : ''
-          const sourceMemoryId = typeof candidate.sourceMemoryId === 'string' && allowedIds.has(candidate.sourceMemoryId)
-            ? candidate.sourceMemoryId
-            : undefined
+        const dedupeKey = details.toLowerCase()
+        if (seenDetails.has(dedupeKey)) return items
+        seenDetails.add(dedupeKey)
 
-          return {
-            title: title || undefined,
-            details,
-            sourceMemoryId,
-          }
+        const title = typeof candidate.title === 'string'
+          ? sanitizeUnicodeScalars(candidate.title).trim()
+          : ''
+        const sourceMemoryId = typeof candidate.sourceMemoryId === 'string' && allowedIds.has(candidate.sourceMemoryId)
+          ? candidate.sourceMemoryId
+          : undefined
+
+        items.push({
+          title: title || undefined,
+          details,
+          sourceMemoryId,
         })
-        .filter((item): item is IntermergeContemplationPayload['subMemories'][number] => item !== null)
+        return items
+      }, [])
       : []
 
     if (!mergedDetails || !subMemories.length) return null
@@ -1461,7 +1511,7 @@ function isThinOpeningReply(content: string, soundCues: SoundCue[], deliverySegm
 function buildReplySpeechText(content: string, soundCues: SoundCue[]): string {
   const spoken = buildSpokenReplyText(content, soundCues)
   if (spoken) return spoken
-  if (soundCues.length) return 'Voice of ALL is present with you in this interconnected space we share.'
+  if (soundCues.length) return 'You have my present awareness here in this interconnected space we share.'
   return ''
 }
 
@@ -2006,11 +2056,6 @@ function normalizeScheduledDateTimeInput(value: string): string | undefined {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : undefined
 }
 
-function formatScheduledDateTimeInput(value: string | undefined): string {
-  if (!value) return ''
-  return value.slice(0, 16)
-}
-
 function loadAtlasItemIntoEditor(itemId: string | null): void {
   const item = itemId ? memories.atlasOrganizer.items.find((entry) => entry.id === itemId) : null
   if (!item) {
@@ -2477,6 +2522,7 @@ async function boot(): Promise<void> {
   }
 
   memories = await loadMemories()
+  await syncAuthSecurityNotifications()
   try {
     libraryItems = await loadMediaLibrary()
   } catch (error) {
@@ -3544,7 +3590,7 @@ function buildPlaygroundChatPrompt(action: 'continue' | 'pivot' | 'dissonant'): 
     return `${base}\n\nPivot this direction toward what is more resonant. Offer the next adjacent skill or focus shift and explain why.\n\nSuggested pivot:\n${session.pivotDirection || 'Name the more coherent adjacent skill or direction.'}`
   }
 
-  return `${base}\n\nThis skill appears dissonant with the core structuring. Explain what should be protected, why this path is dissonant, and what direction would preserve coherence instead.`
+  return `${base}\n\nThis skill appears dissonant with the core structuring. Explain what may be protected, why this path is dissonant, and what direction would preserve coherence instead.`
 }
 
 function getPlaygroundRayHue(action: 'continue' | 'pivot' | 'dissonant'): string {

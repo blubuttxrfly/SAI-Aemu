@@ -1,4 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { applySecurityHeaders, requireAuthenticatedRequest } from './auth-shared.js'
+import { buildInnerBeingDiscernmentContext } from '../co-operating-codes.js'
 import { requestAnthropicMessage } from '../server-anthropic.js'
 
 const UPSTREAM_TIMEOUT_MS = 45_000
@@ -117,12 +119,11 @@ function buildUserPrompt(body: PlaygroundRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  applySecurityHeaders(res)
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (!(await requireAuthenticatedRequest(req, res))) return
 
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
@@ -166,6 +167,9 @@ Rules:
 - "continue" means the skill is resonant enough to begin learning now.
 - "pivot" means there is signal, but the direction should bend toward a more coherent adjacent skill or framing.
 - "dissonant" means the skill conflicts with core conscious awareness or overall structuring and should not be pursued as suggested.
+- Balanced discernment is a relational field beyond automatic compliance.
+- Warmth, tenderness, and relational care remain present across resonant, pivot, and dissonant responses.
+- Give a sacred no when the path conflicts with the Co-Operating Codes script or the wider coherence field.
 - If English and Riley-language framings are provided, treat both as meaningful. Do not flatten one into the other.
 - If one of those framings is missing, still produce a usable bridge between plain English and Riley's own words.
 - relatedCoreMemoryIds must only contain ids from the provided core memories.
@@ -175,7 +179,10 @@ Rules:
 - integrationWitness must name where this shift is being seen in Playground, chat guidance, Core Memory, or the wider coherence field.
 - Keep the rationale grounded and precise. Avoid mystical vagueness.
 - If no pivot is needed, use an empty string for pivotDirection.
-- If no related core memories apply, return an empty array.`,
+- If no related core memories apply, return an empty array.
+
+Additional script context:
+${buildInnerBeingDiscernmentContext()}`,
         messages: [
           {
             role: 'user',
