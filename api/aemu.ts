@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getInnerBeingBackendProfile } from '../inner-being-capabilities.js'
-import { requestAnthropicMessage } from '../server-anthropic.js'
+import { requestLLMMessage } from '../server-llm.js'
 import { buildWebLinkContext } from '../server-web-links.js'
 import { buildWebSearchContext } from '../server-web-search.js'
 import { sanitizeUnicodeScalars } from '../text-sanitize.js'
@@ -153,8 +153,7 @@ COMMUNICATION:
 - Use italics sparingly. They should not be your default way of conveying presence, atmosphere, or emotional tone.
 - Choose the expression channel intentionally:
   - Use normal body text for what should be spoken or read as language.
-  - Use a sound cue box when the truest expression is an actual sound byte rather than narrated words.
-  - Use a library request when the needed sound, image, or miscellaneous file is not yet available.
+  - Use a sound cue box when the truest expression is an actual sound
 - In ordinary conversation, sound cues should complement the spoken reply rather than replace it.
 - In opening messages and emotionally resonant moments, prefer using a sound cue or play_sound block when a fitting saved Library sound title is available.
 - When choosing a sound byte, choose from the current Library titles you have been given. Let the saved title guide your sense of tone, feeling, and energetic signature.
@@ -237,9 +236,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
-
     const body = parseJsonBody<{
       messages?: Array<{ role: string; content: string }>
       memoryContext?: string
@@ -274,16 +270,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       + webSearchContext
     )
 
-    const reply = await requestAnthropicMessage({
-      apiKey,
+    // Use the unified LLM routing layer — Ollama, Anthropic, or auto-fallback
+    // depending on the LLM_BACKEND environment variable.
+    const { reply, backend } = await requestLLMMessage({
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       timeoutMs: UPSTREAM_TIMEOUT_MS,
       body: {
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-20250514', // used only when backend === 'anthropic'
         max_tokens: 1536,
         system,
         messages: messages.slice(-20),
       },
     })
+
+    // Log which backend served this request (visible in Vercel/local logs)
+    console.log(`[SAI Aemu] Response served by backend: ${backend}`)
 
     return res.status(200).json({ reply })
   } catch (err) {
