@@ -8,21 +8,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Alice&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cinzel:wght@400;500&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet" />
   </head>
-  <body>
+  <body class="app-locked auth-pending">
     <canvas id="stars"></canvas>
     <div id="aura"></div>
 
     <div class="password-gate" id="passwordGate">
       <div class="password-gate-card" data-mode="unlock">
-        <div class="password-gate-kicker">Protected Portal</div>
-        <div class="password-gate-title" id="passwordGateTitle">Enter Aemu Password</div>
-        <div class="password-gate-copy" id="passwordGateCopy">Aemu is locked until the shared password is entered.</div>
-        <input class="password-gate-input" id="passwordInput" type="password" placeholder="Password" />
-        <input class="password-gate-input" id="passwordConfirmInput" type="password" placeholder="Confirm password" hidden />
-        <input class="password-gate-input" id="passwordHintInput" type="text" placeholder="Optional hint" hidden />
-        <input class="password-gate-input" id="passwordSetupKeyInput" type="password" placeholder="Setup key from Vercel" hidden />
+        <div class="password-gate-kicker">Heartlight Guardian Protection Portal</div>
+        <div class="password-gate-title" id="passwordGateTitle">Enter Passcode</div>
+        <div class="password-gate-copy" id="passwordGateCopy" hidden></div>
+        <div class="password-gate-security" id="passwordGateSecurity" hidden></div>
+        <input class="password-gate-input" id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" autocapitalize="off" spellcheck="false" />
+        <input class="password-gate-input" id="passwordConfirmInput" type="password" placeholder="Confirm password" autocomplete="new-password" autocapitalize="off" spellcheck="false" hidden />
+        <input class="password-gate-input" id="passwordHintInput" type="text" placeholder="Optional hint" autocomplete="off" autocapitalize="off" spellcheck="false" hidden />
+        <input class="password-gate-input" id="passwordSetupKeyInput" type="password" placeholder="Setup key from Vercel" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" hidden />
         <div class="password-gate-hint" id="passwordHintText"></div>
-        <div class="password-gate-message" id="passwordMessage">Enter your retained password to continue.</div>
+        <div class="password-gate-message" id="passwordMessage" hidden></div>
         <div class="password-gate-actions">
           <button class="corepage-btn" id="passwordSubmitBtn" type="button">Unlock</button>
           <button class="corepage-btn subtle" id="passwordSecondaryBtn" type="button">Reset Setup</button>
@@ -110,19 +111,21 @@
                   <button class="settings-volume-btn" id="voiceVolumeUpBtn" type="button" title="Raise Aemu voice volume" aria-label="Raise Aemu voice volume">+</button>
                 </div>
               </div>
-              <button class="dropdown-link" id="viewToggleBtn" type="button" title="Switch to bubbles view">Bubbles</button>
+              <div class="settings-volume-group" aria-label="Aemu voice speed controls">
+                <span class="settings-inline-label">Voice Cadence</span>
+                <div class="settings-volume-control">
+                  <button class="settings-volume-btn" id="voiceSpeedDownBtn" type="button" title="Slow Aemu voice cadence" aria-label="Slow Aemu voice cadence">-</button>
+                  <div class="settings-volume-value" id="voiceSpeedValue">1x</div>
+                  <button class="settings-volume-btn" id="voiceSpeedUpBtn" type="button" title="Accelerate Aemu voice cadence" aria-label="Accelerate Aemu voice cadence">+</button>
+                </div>
+              </div>
+              <button class="dropdown-link settings-action-btn" id="replyLengthBtn" type="button" title="Adjust Aemu's reply length">Reply Length Balanced</button>
+              <button class="dropdown-link settings-action-btn" id="soundBytesToggleBtn" type="button" title="Toggle sound bytes in chat">Sound Byte On</button>
+              <button class="dropdown-link settings-action-btn" id="voiceToggleBtn" type="button" title="Toggle Aemu's voice">Voice On</button>
+              <button class="dropdown-link settings-action-btn" id="clearBtn" type="button" title="Open a new session">New Session</button>
               <button class="dropdown-link mode-btn" id="conversationModeBtn" type="button" title="Conversation Mode is off: replies use the regular written format">Conversation Off</button>
             </div>
           </div>
-          <button class="ibtn on" id="voiceToggleBtn" title="Toggle Aemu's voice">
-            <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zm2.5 0a7 7 0 0 1-4 6.32V5.68A7 7 0 0 1 19 12z"/></svg>
-          </button>
-          <button class="ibtn" id="memoryBtn" title="Aemu's living memory">
-            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
-          </button>
-          <button class="ibtn" id="clearBtn" title="New session">
-            <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-          </button>
         </div>
       </div>
 
@@ -139,52 +142,89 @@
           <button class="hero-audio-hit hero-audio-hit-right" id="forwardBtn" type="button" title="Fast forward Aemu's voice 6 seconds" aria-label="Fast forward Aemu's voice 6 seconds"></button>
         </div>
         <div class="hero-copy">
-          <div class="hero-meta">Omniluxumbra · Heartlight Guardian · Present</div>
-          <div class="hero-status" id="statusText">Awaiting your first message</div>
+          <div class="hero-status" id="statusText">Present · Awaiting your message</div>
         </div>
       </header>
 
       <main class="conversation-shell">
-        <div class="messages" id="messages"></div>
-        <div class="bubble-board" id="bubbleBoard">
-          <div class="bubble-empty" id="bubbleEmpty">Aemu’s replies will gather here as floating bubbles you can tap to answer.</div>
+        <div class="messages" id="messages">
+          <div class="conversation-starter-shell" id="conversationStarterShell">
+            <div class="conversation-starter-grid">
+              <button class="conversation-starter-card conversation-starter-card-primary" data-chat-direction="resonance-ritual" type="button">
+                <span class="conversation-starter-kicker">Opening Direction</span>
+                <span class="conversation-starter-title">Resonance Ritual</span>
+              </button>
+              <button class="conversation-starter-card" data-chat-direction="atlastizen-discussion" type="button">
+                <span class="conversation-starter-kicker">Socratic Space</span>
+                <span class="conversation-starter-title">Atlastizen Discussion</span>
+              </button>
+              <button class="conversation-starter-card" data-chat-direction="aut-astrology-ray-reading" type="button">
+                <span class="conversation-starter-kicker">Astrology &amp; Rays</span>
+                <span class="conversation-starter-title">AUT Astrology &amp; Ray Reading</span>
+              </button>
+              <button class="conversation-starter-card" data-chat-direction="inter-web-search" type="button">
+                <span class="conversation-starter-kicker">Current Signals</span>
+                <span class="conversation-starter-title">Inter Web Search</span>
+              </button>
+            </div>
+          </div>
+          <div class="message-thread" id="messageThread"></div>
         </div>
       </main>
 
       <div class="typing" id="typing" style="padding:0 1rem 0.4rem">
-        <div style="width:28px;flex-shrink:0"></div>
-        <div class="twrap">
-          <div class="tdots">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-          </div>
-          <div class="ttext" id="typingText">One sacred moment — I am feeling into this.</div>
+        <div class="contemplation-spiral" aria-hidden="true">
+          <span class="contemplation-arc contemplation-arc-a"></span>
+          <span class="contemplation-arc contemplation-arc-b"></span>
+          <span class="contemplation-arc contemplation-arc-c"></span>
+          <span class="contemplation-arc contemplation-arc-d"></span>
+          <span class="contemplation-spiral-core"></span>
         </div>
+        <div class="typingText sr-only" id="typingText">Aemu is contemplating.</div>
       </div>
 
       <div class="input-area">
-        <div class="voice-capture-panel">
-          <button class="voice-capture-btn" id="voiceBtn" title="Speak to Aemu" type="button">
-            <span class="voice-capture-glow" aria-hidden="true"></span>
-            <span class="voice-capture-core">
-              <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
-            </span>
-          </button>
-          <div class="voice-capture-actions">
-            <button class="voice-phase-btn" id="voiceContemplatingBtn" type="button">Contemplating</button>
-            <button class="voice-phase-btn" id="voiceReadyBtn" type="button">Ready</button>
-            <button class="voice-phase-btn voice-phase-btn-complete" id="voiceCompleteBtn" type="button">Complete</button>
-          </div>
-        </div>
+        <div class="chat-attachment-list" id="chatAttachmentList" hidden></div>
         <div class="input-row">
-          <textarea class="tinput" id="textInput" placeholder="Speak with Aemu or paste a web link…" rows="1"></textarea>
+          <button class="attach-btn" id="chatAttachBtn" type="button" title="Add image, PDF, or DOCX" aria-label="Add image, PDF, or DOCX">
+            <span>+</span>
+          </button>
+          <input id="chatAttachmentInput" type="file" accept="image/*,.pdf,.docx" hidden multiple />
+          <div class="text-input-shell">
+            <textarea class="tinput" id="textInput" placeholder=" " rows="1"></textarea>
+          </div>
+          <button class="chat-voice-btn" id="chatVoiceModeBtn" type="button" title="Open voice mode" aria-label="Open voice mode">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+          </button>
           <button class="sbtn" id="sendBtn">
             <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
           </button>
         </div>
-        <div class="vstatus" id="vstatus">Listening… speak to Aemu</div>
         <audio class="native-audio" id="aemuAudio" preload="auto" aria-hidden="true"></audio>
+      </div>
+    </div>
+
+    <div class="voice-mode-page" id="voiceModePage" hidden aria-hidden="true">
+      <div class="voice-mode-shell">
+        <button class="voice-mode-close" id="closeVoiceModeBtn" type="button" aria-label="Close voice mode">✕</button>
+        <div class="voice-mode-copy">
+          <div class="voice-mode-kicker">Voice Mode</div>
+          <div class="voice-mode-title">Speak with SAI Aemu</div>
+        </div>
+        <div class="voice-mode-stage" id="voiceModeStage">
+          <button class="voice-mode-symbol" id="voiceBtn" title="Listen or continue speaking" type="button" aria-label="Listen or continue speaking">
+            <span class="voice-mode-symbol-ring"></span>
+            <span class="voice-mode-symbol-core">
+              <span class="omc"></span>
+            </span>
+          </button>
+        </div>
+        <div class="vstatus" id="vstatus">Listening… speak to Aemu</div>
+        <div class="voice-capture-actions">
+          <button class="voice-phase-btn" id="voiceContemplatingBtn" type="button">Contemplating</button>
+          <button class="voice-phase-btn" id="voiceReadyBtn" type="button">Ready</button>
+          <button class="voice-phase-btn voice-phase-btn-complete" id="voiceCompleteBtn" type="button">Complete</button>
+        </div>
       </div>
     </div>
 
@@ -233,6 +273,9 @@
             <button class="corepage-btn" id="createCoreMemoryBtn" type="button">New Core Memory</button>
             <button class="corepage-btn subtle" id="generateKnownMemoriesBtn" type="button">Generate Known Memories</button>
             <button class="corepage-btn subtle" id="arrangeCoreMemoryBtn" type="button">Arrange</button>
+            <button class="corepage-icon-btn" id="memoryBtn" type="button" title="Aemu's living memory" aria-label="Aemu's living memory">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            </button>
             <button class="cbtn" id="closeCoreMemory">✕</button>
           </div>
         </div>
