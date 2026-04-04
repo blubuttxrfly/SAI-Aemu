@@ -63,6 +63,8 @@ import {
   setMediaLibrarySaveMode,
 } from './media-library'
 import { sanitizeUnicodeScalars } from './text-sanitize'
+import { warmEmbeddingModel } from './memory-embeddings'
+import { syncMemoryEmbeddings } from './memory-semantic-retrieval'
 import {
   initStarfield, appendMessage, setTyping, setStatus,
   setAura, showToast, setVoiceBtnState, setVoiceToggleState, setConversationModeToggleState,
@@ -927,6 +929,9 @@ async function persistMemoryState(next: AemuMemories): Promise<void> {
   syncSelectedCoreMemoryState()
   refreshMemoryViews()
   await saveMemories(memories)
+  // Keep the semantic vector store in sync after every memory change.
+  // Runs in the background — only re-embeds memories whose text has changed.
+  void syncMemoryEmbeddings(memories)
 }
 
 function flushEntryLoadingText(): void {
@@ -2522,6 +2527,12 @@ async function boot(): Promise<void> {
   }
 
   memories = await loadMemories()
+  // Warm the semantic embedding model in the background so it is ready
+  // for the first message. Safe to call before the model is needed.
+  warmEmbeddingModel()
+  // Sync all existing memories into the vector store asynchronously.
+  // This runs in the background and does not block app startup.
+  void syncMemoryEmbeddings(memories)
   await syncAuthSecurityNotifications()
   try {
     libraryItems = await loadMediaLibrary()
@@ -2782,6 +2793,8 @@ async function sendMessageWithText(text: string): Promise<void> {
   memories = integrateUserMessage(sanitizedText, memories)
   refreshMemoryViews()
   const memorySavePromise = saveMemories(memories)
+  // Sync any new embeddings created by integrateUserMessage in the background.
+  void syncMemoryEmbeddings(memories)
 
   startResponseContemplation(usesWebSearchContemplation ? 'web-search' : usesDocumentReadingContemplation ? 'reading-document' : 'default')
   setSendDisabled(true)
