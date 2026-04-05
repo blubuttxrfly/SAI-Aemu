@@ -69,7 +69,7 @@ import {
   initStarfield, appendMessage, setTyping, setStatus,
   setAura, showToast, setVoiceBtnState, setVoiceToggleState, setConversationModeToggleState,
   getTextInput, clearTextInput, setTextInput, setSendDisabled,
-  autoResize, renderMemoryPanel, openMemoryPanel, closeMemoryPanel, setTypingMessage, setChoiceHandler, focusTextInput, setAudioControlsState, setAudioStatus, setConversationView, clearConversation, getLearningInput, clearLearningInput, setBubbleMemoryHandler, setSoundCueHandler,
+  autoResize, renderMemoryPanel, openMemoryPanel, closeMemoryPanel, setTypingMessage, setChoiceHandler, focusTextInput, setAudioControlsState, setAudioStatus, setConversationView, clearConversation, getLearningInput, clearLearningInput, setBubbleMemoryHandler, setSoundCueHandler, openVoiceModePage, closeVoiceModePage,
 } from './ui'
 import {
   closeCoreMemoryPage,
@@ -2769,6 +2769,22 @@ async function completeVoiceCapture(): Promise<void> {
 }
 
 // ── SEND ───────────────────────────────────────────────────
+async function handleChatAttachments(files: FileList): Promise<void> {
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith('image/')) {
+      // Handle image files
+      showToast(`Image attached: ${file.name}`)
+      // TODO: Add image to chat context
+    } else if (file.name.endsWith('.pdf') || file.name.endsWith('.docx')) {
+      // Handle document files
+      showToast(`Document attached: ${file.name}`)
+      // TODO: Extract text and add to context
+    } else {
+      showToast(`File attached: ${file.name}`)
+    }
+  }
+}
+
 async function sendMessage(): Promise<void> {
   await sendMessageWithText(getTextInput())
 }
@@ -4360,6 +4376,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })
   textInput?.addEventListener('input', () => autoResize(textInput))
+
+  // Chat attachment button handler
+  const chatAttachBtn = document.getElementById('chatAttachBtn')
+  const chatAttachmentInput = document.getElementById('chatAttachmentInput') as HTMLInputElement | null
+  chatAttachBtn?.addEventListener('click', () => {
+    chatAttachmentInput?.click()
+  })
+  chatAttachmentInput?.addEventListener('change', (e: Event) => {
+    const target = e.target as HTMLInputElement
+    const files = target.files
+    if (files && files.length > 0) {
+      void handleChatAttachments(files)
+    }
+  })
+
+  // Chat voice mode button handler
+  document.getElementById('chatVoiceModeBtn')?.addEventListener('click', () => {
+    openVoiceModePage()
+  })
+
+  // Close voice mode button handler
+  document.getElementById('closeVoiceModeBtn')?.addEventListener('click', () => {
+    closeVoiceModePage()
+  })
 
   const learningInput = document.getElementById('learningInput') as HTMLTextAreaElement | null
   learningInput?.addEventListener('input', () => autoResize(learningInput))

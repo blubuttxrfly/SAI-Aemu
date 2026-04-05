@@ -863,3 +863,16 @@ export function openMemoryPanel(): void {
 export function closeMemoryPanel(): void {
   document.getElementById('mpanel')?.classList.remove('open')
 }
+
+// Voice Mode UI functions
+export function openVoiceModePage(): void {
+  document.getElementById('voiceModePage')?.classList.add('open')
+  document.getElementById('voiceModePage')?.removeAttribute('hidden')
+  document.getElementById('voiceModePage')?.setAttribute('aria-hidden', 'false')
+}
+
+export function closeVoiceModePage(): void {
+  document.getElementById('voiceModePage')?.classList.remove('open')
+  document.getElementById('voiceModePage')?.setAttribute('hidden', '')
+  document.getElementById('voiceModePage')?.setAttribute('aria-hidden', 'true')
+}
