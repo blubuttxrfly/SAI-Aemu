@@ -67,6 +67,10 @@ export interface OpeningSessionRitual {
 export interface AemuSettings {
   internetSearchEnabled: boolean
   voiceVolume: number
+  /** LLM provider preference: 'ollama' | 'anthropic' */
+  llmProvider?: 'ollama' | 'anthropic'
+  /** Selected Ollama model name */
+  ollamaModel?: string
 }
 
 export interface CoreMemoryPosition {

@@ -4,7 +4,7 @@
 
 ---
 
-## Phase 1: Ollama Integration & Model Switching
+## Phase 1: Ollama Integration & Model Switching 🔄 IN PROGRESS
 
 ### Goals:
 - Connect SAI Aemu to local Ollama instance
@@ -12,12 +12,18 @@
 - Maintain conversation continuity across model switches
 - UI selector for model switching in settings
 
-### Technical Approach:
-1. Add Ollama API client to `api/ollama.ts` (serverless function)
-2. Extend `server-ollama.ts` with model management
-3. Add model selector dropdown in Settings menu
-4. Store current model preference in memory
-5. Graceful fallback if Ollama unavailable
+### What's Been Implemented (2026-04-05):
+1. ✅ Added `listOllamaModels()` function to `server-ollama.ts`
+2. ✅ Extended `server-llm.ts` to support client-side provider preferences
+3. ✅ Extended `types.ts` with `llmProvider` and `ollamaModel` settings
+4. ✅ Extended `memory.ts` with defaults (ollama, kimi-k2.5:cloud)
+5. ✅ Extended `api/aemu.ts` to accept provider preferences from client
+
+### Still Needed:
+1. ⏳ UI Model Selector in Settings dropdown
+2. ⏳ Update `sendToAemu()` calls to pass settings
+3. ⏳ Connect settings to API request body
+4. ⏳ Graceful fallback UI if Ollama unavailable
 
 ---
 

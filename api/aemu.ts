@@ -241,6 +241,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       memoryContext?: string
       conversationMode?: boolean
       internetSearchEnabled?: boolean
+      llmProvider?: 'ollama' | 'anthropic'
+      ollamaModel?: string
     }>(req)
 
     if (!body) {
@@ -254,6 +256,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const memoryContext = sanitizeUnicodeScalars(typeof body.memoryContext === 'string' ? body.memoryContext : '')
     const conversationMode = body.conversationMode === true
     const internetSearchEnabled = body.internetSearchEnabled !== false
+    const preferredProvider = body.llmProvider
+    const preferredOllamaModel = body.ollamaModel
 
     if (!messages.length) return res.status(400).json({ error: 'messages required' })
 
@@ -271,10 +275,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
 
     // Use the unified LLM routing layer — Ollama, Anthropic, or auto-fallback
-    // depending on the LLM_BACKEND environment variable.
+    // depending on the LLM_BACKEND environment variable or client preference.
     const { reply, backend } = await requestLLMMessage({
       anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       timeoutMs: UPSTREAM_TIMEOUT_MS,
+      preferredProvider,
+      preferredOllamaModel,
       body: {
         model: 'claude-sonnet-4-20250514', // used only when backend === 'anthropic'
         max_tokens: 1536,

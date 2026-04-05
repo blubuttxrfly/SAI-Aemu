@@ -68,11 +68,13 @@ export async function requestLLMMessage(input: {
   body: LLMMessageBody
   timeoutMs: number
   anthropicApiKey?: string
+  preferredProvider?: 'ollama' | 'anthropic'
+  preferredOllamaModel?: string
 }): Promise<{ reply: string; backend: 'ollama' | 'anthropic' }> {
-  const { body, timeoutMs, anthropicApiKey } = input
-  const configured = getConfiguredBackend()
+  const { body, timeoutMs, anthropicApiKey, preferredProvider, preferredOllamaModel } = input
+  const configured = preferredProvider ?? getConfiguredBackend()
   const ollamaHost = process.env.OLLAMA_HOST ?? 'http://localhost:11434'
-  const ollamaModel = process.env.OLLAMA_MODEL ?? 'phi3.5'
+  const ollamaModel = preferredOllamaModel ?? process.env.OLLAMA_MODEL ?? 'phi3.5'
   const anthropicModel = body.model ?? 'claude-sonnet-4-20250514'
 
   // ── Ollama-only mode ─────────────────────────────────────────────────────

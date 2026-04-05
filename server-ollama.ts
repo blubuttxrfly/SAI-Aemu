@@ -163,3 +163,18 @@ export async function requestOllamaMessage(input: {
     clearTimeout(timeout)
   }
 }
+
+/**
+ * Fetch list of available models from Ollama.
+ * Returns array of model names or empty array if unreachable.
+ */
+export async function listOllamaModels(host: string = DEFAULT_OLLAMA_HOST): Promise<string[]> {
+  try {
+    const response = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(5000) })
+    if (!response.ok) return []
+    const data = await response.json() as { models?: Array<{ name: string }> }
+    return data.models?.map(m => m.name) ?? []
+  } catch {
+    return []
+  }
+}

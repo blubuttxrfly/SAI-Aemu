@@ -159,6 +159,8 @@ function defaultAemuSettings(): AemuSettings {
   return {
     internetSearchEnabled: true,
     voiceVolume: 1,
+    llmProvider: 'ollama',
+    ollamaModel: 'kimi-k2.5:cloud',
   }
 }
 
