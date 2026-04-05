@@ -281,17 +281,25 @@ function clearCurrentAudio(): void {
 }
 
 async function fetchSpeechAudioBlob(text: string): Promise<Blob> {
-  const res = await fetch('/api/speak', {
+  const requestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
-  })
-
-  if (!res.ok) {
-    throw new Error(await parseVoiceErrorMessage(res))
   }
 
-  return res.blob()
+  const piperResponse = await fetch('/api/piper', requestInit)
+  if (piperResponse.ok) {
+    return piperResponse.blob()
+  }
+
+  const speakResponse = await fetch('/api/speak', requestInit)
+  if (!speakResponse.ok) {
+    const piperError = await parseVoiceErrorMessage(piperResponse)
+    const speakError = await parseVoiceErrorMessage(speakResponse)
+    throw new Error(`${speakError} (Piper direct error: ${piperError})`)
+  }
+
+  return speakResponse.blob()
 }
 
 async function playQueueIndex(index: number, continuing = false): Promise<void> {

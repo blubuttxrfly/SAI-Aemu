@@ -3,11 +3,13 @@ import os
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from urllib.request import urlopen
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_ID = os.environ.get("PIPER_MODEL", "en_US-reza_ibrahim-medium").strip()
-INTERNAL_API_SECRET = (os.environ.get("AEMU_INTERNAL_API_SECRET") or os.environ.get("AEMU_SESSION_SECRET") or "").strip()
+DEFAULT_DATA_DIR = Path(os.environ.get("PIPER_DATA_DIR", str(PROJECT_ROOT / "piper-data")))
+RUNTIME_DATA_DIR = Path("/tmp/aemu-piper-data")
 
 
 def json_error(handler: BaseHTTPRequestHandler, status: int, message: str) -> None:
@@ -21,6 +23,55 @@ def json_error(handler: BaseHTTPRequestHandler, status: int, message: str) -> No
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
+
+
+def derive_voice_path(model_id: str) -> str:
+    locale, remainder = model_id.split("-", 1)
+    voice_name, quality = remainder.rsplit("-", 1)
+    language = locale.split("_", 1)[0]
+    return f"{language}/{locale}/{voice_name}/{quality}"
+
+
+def resolve_download_urls(model_id: str) -> tuple[str, str]:
+    voice_path = derive_voice_path(model_id)
+    base_path = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{voice_path}/{model_id}"
+
+    model_url = os.environ.get("PIPER_MODEL_URL", f"{base_path}.onnx").strip()
+    config_url = os.environ.get("PIPER_CONFIG_URL", f"{base_path}.onnx.json").strip()
+    return model_url, config_url
+
+
+def download_file(source_url: str, destination_path: Path) -> None:
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = destination_path.with_suffix(f"{destination_path.suffix}.tmp")
+
+    with urlopen(source_url, timeout=60) as response, open(temp_path, "wb") as output_file:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            output_file.write(chunk)
+
+    os.replace(temp_path, destination_path)
+
+
+def resolve_model_paths() -> tuple[Path, Path]:
+    model_path = DEFAULT_DATA_DIR / f"{DEFAULT_MODEL_ID}.onnx"
+    config_path = DEFAULT_DATA_DIR / f"{DEFAULT_MODEL_ID}.onnx.json"
+
+    if model_path.exists() and config_path.exists():
+        return model_path, config_path
+
+    runtime_model_path = RUNTIME_DATA_DIR / f"{DEFAULT_MODEL_ID}.onnx"
+    runtime_config_path = RUNTIME_DATA_DIR / f"{DEFAULT_MODEL_ID}.onnx.json"
+    model_url, config_url = resolve_download_urls(DEFAULT_MODEL_ID)
+
+    if not runtime_model_path.exists():
+        download_file(model_url, runtime_model_path)
+    if not runtime_config_path.exists():
+        download_file(config_url, runtime_config_path)
+
+    return runtime_model_path, runtime_config_path
 
 
 def read_text_payload(handler: BaseHTTPRequestHandler) -> str:
@@ -49,30 +100,7 @@ def read_text_payload(handler: BaseHTTPRequestHandler) -> str:
 def load_voice():
     from piper import PiperVoice
 
-    configured_data_dir = os.environ.get("PIPER_DATA_DIR", "").strip()
-    data_dir_candidates = []
-    if configured_data_dir:
-        data_dir_candidates.append(Path(configured_data_dir))
-    data_dir_candidates.extend([
-        PROJECT_ROOT / "piper-data",
-        Path(__file__).resolve().parent / "piper-data",
-    ])
-
-    model_path = None
-    config_path = None
-    for candidate in data_dir_candidates:
-        candidate_model = candidate / f"{DEFAULT_MODEL_ID}.onnx"
-        candidate_config = candidate / f"{DEFAULT_MODEL_ID}.onnx.json"
-        if candidate_model.exists() and candidate_config.exists():
-            model_path = candidate_model
-            config_path = candidate_config
-            break
-
-    if model_path is None or config_path is None:
-        checked = ", ".join(str(candidate) for candidate in data_dir_candidates)
-        raise FileNotFoundError(
-            f"Missing Piper model bundle for {DEFAULT_MODEL_ID}. Checked: {checked}"
-        )
+    model_path, config_path = resolve_model_paths()
 
     return PiperVoice.load(str(model_path), config_path=str(config_path))
 
@@ -113,10 +141,6 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        if not INTERNAL_API_SECRET or self.headers.get("x-aemu-internal-piper", "") != INTERNAL_API_SECRET:
-            json_error(self, 401, "internal authorization required")
-            return
-
         try:
             text = read_text_payload(self)
             audio = synthesize_wav_bytes(text)

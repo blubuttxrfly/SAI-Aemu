@@ -1,9 +1,13 @@
 import { spawn } from 'node:child_process'
-import { existsSync, promises as fs } from 'node:fs'
+import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { applySecurityHeaders, getInternalApiSecret, requireAuthenticatedRequest } from './auth-shared.js'
+
+type ElevenVoice = {
+  voice_id?: string
+  name?: string | null
+}
 
 type PiperRuntime = {
   pythonPath: string
@@ -15,6 +19,9 @@ type PiperHttpResponse = {
   mimeType: string
   audio: Buffer
 }
+
+let cachedVoiceName = ''
+let cachedVoiceId = ''
 
 function parseJsonBody<T>(req: VercelRequest): T | null {
   const body = req.body
@@ -45,30 +52,11 @@ function resolvePiperPythonPath(): string {
   return projectPath('.venv-piper', 'bin', 'python3')
 }
 
-function resolveBundledPiperDataDir(modelId: string): string {
-  const candidates = [
-    projectPath('piper-data'),
-    projectPath('api', 'piper-data'),
-  ]
-
-  for (const candidate of candidates) {
-    const modelPath = path.join(candidate, `${modelId}.onnx`)
-    const configPath = path.join(candidate, `${modelId}.onnx.json`)
-    if (existsSync(modelPath) && existsSync(configPath)) {
-      return candidate
-    }
-  }
-
-  return candidates[0]
-}
-
 function resolvePiperRuntime(): PiperRuntime {
-  const modelId = process.env.PIPER_MODEL?.trim() || 'en_US-reza_ibrahim-medium'
-  const configuredDataDir = process.env.PIPER_DATA_DIR?.trim()
   return {
     pythonPath: resolvePiperPythonPath(),
-    modelId,
-    dataDir: configuredDataDir || resolveBundledPiperDataDir(modelId),
+    modelId: process.env.PIPER_MODEL?.trim() || 'en_US-reza_ibrahim-medium',
+    dataDir: process.env.PIPER_DATA_DIR?.trim() || projectPath('piper-data'),
   }
 }
 
@@ -190,12 +178,16 @@ if not wrote_audio:
 async function synthesizeWithPiperHttp(text: string, req: VercelRequest): Promise<PiperHttpResponse | null> {
   const endpoint = getConfiguredPiperHttpUrl(req)
   if (!endpoint) return null
+  const protectionBypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
 
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-aemu-internal-piper': getInternalApiSecret(),
+      'x-aemu-internal-piper': '1',
+      ...(protectionBypassSecret
+        ? { 'x-vercel-protection-bypass': protectionBypassSecret }
+        : {}),
     },
     body: JSON.stringify({ text }),
   })
@@ -212,12 +204,87 @@ async function synthesizeWithPiperHttp(text: string, req: VercelRequest): Promis
   }
 }
 
+async function resolveVoiceId(apiKey: string, requestedName: string): Promise<string | null> {
+  if (cachedVoiceName === requestedName && cachedVoiceId) return cachedVoiceId
+
+  const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+    headers: {
+      'xi-api-key': apiKey,
+      Accept: 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Unable to list ElevenLabs voices: ${err.slice(0, 240)}`)
+  }
+
+  const data = await response.json() as { voices?: ElevenVoice[] }
+  const voices = Array.isArray(data.voices) ? data.voices : []
+  const exact = voices.find((voice) => voice.name?.toLowerCase() === requestedName.toLowerCase())
+  const partial = voices.find((voice) => voice.name?.toLowerCase().includes(requestedName.toLowerCase()))
+  const match = exact ?? partial
+
+  if (!match?.voice_id) return null
+
+  cachedVoiceName = requestedName
+  cachedVoiceId = match.voice_id
+  return match.voice_id
+}
+
+async function synthesizeWithElevenLabs(text: string): Promise<{ mimeType: string; audio: Buffer }> {
+  const apiKey = process.env.ELEVENLABS_API_KEY
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY not configured')
+  }
+
+  const requestedVoiceName = (process.env.ELEVENLABS_VOICE_NAME || 'Remi').trim()
+  const configuredVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim()
+  const voiceId = configuredVoiceId || await resolveVoiceId(apiKey, requestedVoiceName) || null
+  if (!voiceId) {
+    throw new Error(`ElevenLabs voice "${requestedVoiceName}" was not found for this account.`)
+  }
+
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'audio/mpeg',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_flash_v2_5',
+        voice_settings: {
+          stability: 0.52,
+          similarity_boost: 0.88,
+          style: 0.18,
+          use_speaker_boost: true,
+        },
+      }),
+    }
+  )
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(err.slice(0, 300) || `ElevenLabs TTS failed for "${requestedVoiceName}"`)
+  }
+
+  return {
+    mimeType: 'audio/mpeg',
+    audio: Buffer.from(await response.arrayBuffer()),
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  applySecurityHeaders(res)
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  if (!(await requireAuthenticatedRequest(req, res))) return
 
   const body = parseJsonBody<{ text?: string }>(req)
   const text = typeof body?.text === 'string' ? body.text.trim() : ''
@@ -240,14 +307,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(remotePiper.audio)
     }
 
-    return res.status(503).json({
-      error: 'Piper voice runtime is not available. Check PIPER_PYTHON_PATH, PIPER_DATA_DIR, and deployed piper-data files.',
-    })
+    const elevenLabs = await synthesizeWithElevenLabs(text)
+    res.setHeader('Content-Type', elevenLabs.mimeType)
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).send(elevenLabs.audio)
   } catch (error) {
-    console.error('Piper synthesis failed:', error)
-    const detail = error instanceof Error
-      ? error.message
-      : 'Voice synthesis disruption'
-    return res.status(500).json({ error: detail })
+    console.error('Primary Piper synthesis failed:', error)
+
+    try {
+      const elevenLabs = await synthesizeWithElevenLabs(text)
+      res.setHeader('Content-Type', elevenLabs.mimeType)
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(200).send(elevenLabs.audio)
+    } catch (fallbackError) {
+      console.error('ElevenLabs fallback failed:', fallbackError)
+      const detail = fallbackError instanceof Error
+        ? fallbackError.message
+        : 'Voice synthesis disruption'
+      return res.status(500).json({ error: detail })
+    }
   }
 }

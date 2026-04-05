@@ -1,10 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { applySecurityHeaders, requireAuthenticatedRequest } from './auth-shared.js'
 import type { Dirent } from 'node:fs'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { invokeClawInnerBeingBridge, shouldFallbackToNativeOnClawError } from '../server-inner-being-claw.js'
-import { buildInnerBeingDiscernmentContext } from '../co-operating-codes.js'
 import { requestAnthropicMessage } from '../server-anthropic.js'
 import { performWebSearch } from '../server-web-search.js'
 import { shouldRunInternetSearch } from '../internet-search-intent.js'
@@ -64,17 +62,12 @@ type SearchReplaceEdit = {
   reason?: string
 }
 
-type RecentLearningNote = {
-  title: string
-  note: string
-}
-
 type RecentActionLog = {
-  index?: number
+  index: number | undefined
   message: string
-  filePath?: string
-  promptExcerpt?: string
-  resourceSummary?: string
+  filePath: string | undefined
+  promptExcerpt: string | undefined
+  resourceSummary: string | undefined
 }
 
 function getInnerBeingBackend(): 'native' | 'claw' {
@@ -421,10 +414,11 @@ async function buildSnapshot(selectedFilePath?: string, selectedLogPath?: string
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  applySecurityHeaders(res)
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') return res.status(200).end()
-  if (!(await requireAuthenticatedRequest(req, res))) return
 
   try {
     if (req.method === 'GET') {
@@ -477,38 +471,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const selectedFileSnapshot = safeSelectedFilePath
       ? await readCaduceusSnapshot(safeSelectedFilePath)
       : null
-    const recentLearningNotesRaw: RecentLearningNote[] = Array.isArray(body.recentLearningNotes)
-      ? body.recentLearningNotes.reduce<RecentLearningNote[]>((items, item) => {
-        if (!item || typeof item !== 'object') return items
-
-        const title = typeof item.title === 'string' ? sanitizeUnicodeScalars(item.title).trim().slice(0, 120) : ''
-        const note = typeof item.note === 'string' ? sanitizeUnicodeScalars(item.note).trim().slice(0, 1200) : ''
-        if (!title && !note) return items
-
-        items.push({
-          title: title || 'Coding learning',
-          note,
+    const recentLearningNotesRaw = Array.isArray(body.recentLearningNotes)
+      ? body.recentLearningNotes
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null
+          const title = typeof item.title === 'string' ? sanitizeUnicodeScalars(item.title).trim().slice(0, 120) : ''
+          const note = typeof item.note === 'string' ? sanitizeUnicodeScalars(item.note).trim().slice(0, 1200) : ''
+          if (!title && !note) return null
+          return {
+            title: title || 'Coding learning',
+            note,
+          }
         })
-        return items
-      }, []).slice(0, 6)
+        .filter((item): item is { title: string; note: string } => item !== null)
+        .slice(0, 6)
       : []
     const recentActionLogsRaw: RecentActionLog[] = Array.isArray(body.recentActionLogs)
-      ? body.recentActionLogs.reduce<RecentActionLog[]>((items, item) => {
-        if (!item || typeof item !== 'object') return items
-
-        const index = Number.isFinite(Number(item.index)) ? Math.max(1, Math.round(Number(item.index))) : undefined
-        const message = typeof item.message === 'string' ? sanitizeUnicodeScalars(item.message).trim().slice(0, 420) : ''
-        if (!message) return items
-
-        items.push({
-          index,
-          message,
-          filePath: typeof item.filePath === 'string' ? sanitizeUnicodeScalars(item.filePath).trim().slice(0, 240) : undefined,
-          promptExcerpt: typeof item.promptExcerpt === 'string' ? sanitizeUnicodeScalars(item.promptExcerpt).trim().slice(0, 220) : undefined,
-          resourceSummary: typeof item.resourceSummary === 'string' ? sanitizeUnicodeScalars(item.resourceSummary).trim().slice(0, 240) : undefined,
+      ? body.recentActionLogs
+        .flatMap((item): RecentActionLog[] => {
+          if (!item || typeof item !== 'object') return []
+          const index = Number.isFinite(Number(item.index)) ? Math.max(1, Math.round(Number(item.index))) : undefined
+          const message = typeof item.message === 'string' ? sanitizeUnicodeScalars(item.message).trim().slice(0, 420) : ''
+          if (!message) return []
+          return [{
+            index,
+            message,
+            filePath: typeof item.filePath === 'string' ? sanitizeUnicodeScalars(item.filePath).trim().slice(0, 240) : undefined,
+            promptExcerpt: typeof item.promptExcerpt === 'string' ? sanitizeUnicodeScalars(item.promptExcerpt).trim().slice(0, 220) : undefined,
+            resourceSummary: typeof item.resourceSummary === 'string' ? sanitizeUnicodeScalars(item.resourceSummary).trim().slice(0, 240) : undefined,
+          }]
         })
-        return items
-      }, []).slice(0, 8)
+        .slice(0, 8)
       : []
     const explicitEditRequest = wantsEdit(prompt)
     const explicitHealingRequest = wantsHealing(prompt)
@@ -587,9 +580,6 @@ Your job:
 - Check relevant resources before giving implementation guidance when there is a meaningful chance that current documentation or examples would reduce error.
 - Caduceus Healing may be available. When it is enabled and a selected file has a stored last-known-good snapshot, you may choose action "heal" to restore that snapshot when a repair path appears broken, corrupting, or not coherent.
 - Only authorize a code edit when your discernment score reaches at least ${discernmentThreshold}%.
-
-Co-Operating Codes script:
-${buildInnerBeingDiscernmentContext()}
 
 Discernment:
 - Discernment is a 0-100 estimate of how likely the proposed edit is to function as intended with the evidence currently available.
